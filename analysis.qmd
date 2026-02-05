@@ -4,23 +4,40 @@ format: html
 editor: visual
 ---
 
-## Quarto
+## Sleep Deprivation and Cognitive Performance
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+## Goals
 
-## Running Code
+-   Understand the effects of sleep deprivation (hours of sleep, sleep quality, daytime sleep) on cognitive performance (attention, working memory, reaction speed, emotion regulation)
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+### Read Data
 
-```{r}
-1 + 1
+```{r read_data}
+library(readr)
+
+df <- read_csv("sleep_deprivation_dataset_detailed.csv")
+head(df)
 ```
 
-You can add options to executable code like this
+### Data Structure
 
-```{r}
-#| echo: false
-2 * 2
+```{r data_structure}
+str(df)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+### Summary Statistics
+
+```{r summary}
+summary(df)
+```
+
+```{r unique_gender}
+cat("Unique values of df$Gender:", unique(df$Gender), "\n")
+cat("Unique values of df$Caffeine_Intake", sort(unique(df$Caffeine_Intake)), "\n")
+```
+
+Note:
+
+-   `Caffeine_Intake`, `Sleep_Quality_Score`, `Daytime_Sleepiness`, `Physical_Activity_Level`, and `Stress_Level` are discrete variables.
+
+-   `Gender` is a binary variable.
