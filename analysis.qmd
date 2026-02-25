@@ -41,3 +41,245 @@ Note:
 -   `Caffeine_Intake`, `Sleep_Quality_Score`, `Daytime_Sleepiness`, `Physical_Activity_Level`, and `Stress_Level` are discrete variables.
 
 -   `Gender` is a binary variable.
+
+### Univariate Distrubutions
+
+```{r continuous_dists}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+
+continuous_vars <- c(
+  "Sleep_Hours", "Sleep_Quality_Score", "Daytime_Sleepiness",
+  "Stroop_Task_Reaction_Time", "N_Back_Accuracy",
+  "Emotion_Regulation_Score", "PVT_Reaction_Time",
+  "Age", "BMI", "Stress_Level"
+)
+
+df_long_cont <- df |>
+  select(all_of(continuous_vars)) |>
+  pivot_longer(everything(), names_to = "variable", values_to = "value") |>
+  mutate(variable = str_replace_all(variable, "_", " "))
+
+p_continuous <- ggplot(df_long_cont, aes(x = value)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 30, fill = "#4C72B0", color = "white", alpha = 0.8) +
+  geom_density(color = "#C44E52", linewidth = 0.8) +
+  facet_wrap(~ variable, scales = "free", ncol = 4) +
+  labs(
+    title    = "Univariate Distributions — Continuous Variables",
+    subtitle = "Histogram with density overlay",
+    x = NULL, y = "Density"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title       = element_text(face = "bold", size = 14),
+    plot.subtitle    = element_text(color = "grey50", size = 11),
+    strip.text       = element_text(face = "bold", size = 9),
+    panel.grid.minor = element_blank(),
+    axis.text.x      = element_text(size = 7)
+  )
+
+p_continuous
+```
+
+```{r discrete_dists}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+
+discrete_long <- bind_rows(
+  df |> count(value = factor(Caffeine_Intake))       |> mutate(variable = "Caffeine Intake (1–5)"),
+  df |> count(value = factor(Physical_Activity_Level)) |> mutate(variable = "Physical Activity Level (1–10)"),
+  df |> count(value = factor(Gender))                |> mutate(variable = "Gender")
+)
+
+p_discrete <- ggplot(discrete_long, aes(x = value, y = n, fill = variable)) +
+  geom_col(show.legend = FALSE, width = 0.6, alpha = 0.85) +
+  geom_text(aes(label = n), vjust = -0.4, size = 3) +
+  scale_fill_brewer(palette = "Set2") +
+  facet_wrap(~ variable, scales = "free", ncol = 3) +
+  labs(
+    title    = "Univariate Distributions — Discrete & Categorical Variables",
+    subtitle = "Count per category",
+    x = NULL, y = "Count"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title        = element_text(face = "bold", size = 14),
+    plot.subtitle     = element_text(color = "grey50", size = 11),
+    strip.text        = element_text(face = "bold", size = 9),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor  = element_blank()
+  )
+
+p_discrete
+```
+
+### Correlation Matrix
+
+```{r corrplot}
+library(tidyverse)
+library(ggcorrplot)
+
+numeric_vars <- c(
+  "Sleep_Hours", "Sleep_Quality_Score", "Daytime_Sleepiness",
+  "Stroop_Task_Reaction_Time", "N_Back_Accuracy",
+  "Emotion_Regulation_Score", "PVT_Reaction_Time",
+  "Age", "BMI", "Caffeine_Intake", "Physical_Activity_Level", "Stress_Level"
+)
+
+cor_long <- df |>
+  select(all_of(numeric_vars)) |>
+  rename_with(~ str_replace_all(.x, "_", "\n")) |>
+  cor(use = "pairwise.complete.obs") |>
+  as.data.frame() |>
+  rownames_to_column("var1") |>
+  pivot_longer(-var1, names_to = "var2", values_to = "r") |>
+  # keep lower triangle only
+  mutate(var1 = factor(var1, levels = unique(var1)),
+         var2 = factor(var2, levels = unique(var2))) |>
+  filter(as.integer(var1) > as.integer(var2))
+
+p_corr <- ggplot(cor_long, aes(x = var2, y = var1, size = abs(r), fill = r)) +
+  geom_point(shape = 21, color = "white") +
+  geom_text(aes(label = round(r, 2)), size = 3, color = "grey20") +
+  scale_fill_gradient2(low = "#C44E52", mid = "white", high = "#4C72B0",
+                       midpoint = 0, limits = c(-1, 1), name = "r") +
+  scale_size_continuous(range = c(2, 14), guide = "none") +
+  labs(
+    title    = "Correlation Matrix",
+    subtitle = "Circle size = |r|",
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title      = element_text(face = "bold", size = 15),
+    plot.subtitle   = element_text(color = "grey50", size = 11),
+    axis.text.x     = element_text(angle = 45, hjust = 1, size = 7, lineheight = 0.85),
+    axis.text.y     = element_text(size = 7, lineheight = 0.85),
+    panel.grid      = element_blank(),
+    legend.position = "right",
+    plot.margin     = margin(10, 10, 10, 30)
+  )
+
+p_corr
+```
+
+### Scatterplots
+
+```{r scatter_sleep_vs_cognition}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+
+plot_sleep_vs_cognition <- function(data, sleep_var, sleep_label) {
+  
+  cognitive_vars <- c(
+    "Stroop_Task_Reaction_Time",
+    "N_Back_Accuracy",
+    "Emotion_Regulation_Score",
+    "PVT_Reaction_Time"
+  )
+  
+  data |>
+    select(all_of(c(sleep_var, cognitive_vars))) |>
+    pivot_longer(-all_of(sleep_var), names_to = "outcome", values_to = "value") |>
+    mutate(outcome = str_replace_all(outcome, "_", " ")) |>
+    ggplot(aes(x = .data[[sleep_var]], y = value)) +
+    geom_point(alpha = 0.4, size = 1.8, color = "#4C72B0") +
+    geom_smooth(method = "lm", se = TRUE, color = "#C44E52", linewidth = 1) +
+    facet_wrap(~ outcome, scales = "free_y", ncol = 2) +
+    labs(
+      title    = paste("Sleep vs. Cognitive Outcomes —", sleep_label),
+      subtitle = "Linear fit with 95% confidence interval",
+      x        = sleep_label,
+      y        = NULL
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      plot.title     = element_text(face = "bold", size = 15),
+      plot.subtitle  = element_text(color = "grey50", size = 11),
+      strip.text     = element_text(face = "bold", size = 10),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# ── Generate both plots ───────────────────────────────────────────────────────
+p_hours   <- plot_sleep_vs_cognition(df, "Sleep_Hours",         "Sleep Hours")
+p_quality <- plot_sleep_vs_cognition(df, "Sleep_Quality_Score", "Sleep Quality Score")
+
+print(p_hours)
+print(p_quality)
+```
+
+### Binned Scatterplots
+
+```{r binned_scatterplots}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+
+df <- df |>
+  mutate(Age_Group = cut(Age,
+                         breaks = c(-Inf, 25, 35, 45, Inf),
+                         labels = c("≤25", "26–35", "36–45", "46+")))
+
+plot_binned <- function(data, sleep_var, sleep_label, group_var, group_label) {
+  
+  cognitive_vars <- c(
+    "Stroop_Task_Reaction_Time",
+    "N_Back_Accuracy",
+    "Emotion_Regulation_Score",
+    "PVT_Reaction_Time"
+  )
+  
+  data |>
+    select(all_of(c(sleep_var, group_var, cognitive_vars))) |>
+    pivot_longer(-all_of(c(sleep_var, group_var)),
+                 names_to = "outcome", values_to = "value") |>
+    mutate(outcome = str_replace_all(outcome, "_", " ")) |>
+    ggplot(aes(x = .data[[sleep_var]], y = value,
+               color = .data[[group_var]], fill = .data[[group_var]])) +
+    geom_point(alpha = 0.3, size = 1.5) +
+    geom_smooth(method = "lm", se = TRUE, linewidth = 1, alpha = 0.15) +
+    facet_wrap(~ outcome, scales = "free_y", ncol = 2) +
+    labs(
+      title    = paste("Sleep vs. Cognitive Outcomes —", sleep_label),
+      subtitle = paste("By", group_label, "| Linear fit with 95% CI"),
+      x        = sleep_label,
+      y        = NULL,
+      color    = group_label,
+      fill     = group_label
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      plot.title       = element_text(face = "bold", size = 15),
+      plot.subtitle    = element_text(color = "grey50", size = 11),
+      strip.text       = element_text(face = "bold", size = 10),
+      panel.grid.minor = element_blank(),
+      legend.position  = "bottom"
+    )
+}
+
+
+p_hours_gender   <- plot_binned(df, "Sleep_Hours",         "Sleep Hours",         "Gender", "Gender")
+p_quality_gender <- plot_binned(df, "Sleep_Quality_Score", "Sleep Quality Score", "Gender", "Gender")
+
+p_hours_age   <- plot_binned(df, "Sleep_Hours",         "Sleep Hours",         "Age_Group", "Age Group")
+p_quality_age <- plot_binned(df, "Sleep_Quality_Score", "Sleep Quality Score", "Age_Group", "Age Group")
+
+
+gender_colors <- c("#4C72B0", "#C44E52", "#55A868")  # flexible for 2–3 gender categories
+age_colors    <- c("#4C72B0", "#55A868", "#C44E52", "#8172B2")
+
+p_hours_gender   <- p_hours_gender   + scale_color_manual(values = gender_colors) + scale_fill_manual(values = gender_colors)
+p_quality_gender <- p_quality_gender + scale_color_manual(values = gender_colors) + scale_fill_manual(values = gender_colors)
+p_hours_age      <- p_hours_age      + scale_color_manual(values = age_colors)    + scale_fill_manual(values = age_colors)
+p_quality_age    <- p_quality_age    + scale_color_manual(values = age_colors)    + scale_fill_manual(values = age_colors)
+
+print(p_hours_gender)
+print(p_quality_gender)
+print(p_hours_age)
+print(p_quality_age)
+```
