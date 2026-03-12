@@ -8,8 +8,8 @@ editor: visual
 
 ## Goals
 
--   Understand the effects of sleep deprivation (hours of sleep, sleep quality, daytime sleep) on cognitive performance (attention, working memory, reaction speed, emotion regulation)
--   Model cognitive performance against sleep quality, naps, and caffeine intake
+-   Understand the effects of sleep deprivation (hours of sleep, sleep quality, daytime sleep) and behavioral determinants of health (BMI, caffeine intake, physical activity level) on cognitive performance (attention, working memory, reaction speed, emotion regulation).
+-   Model each cognitive performance metric using sleep and behavioral health features.
 
 ### Read Data
 
