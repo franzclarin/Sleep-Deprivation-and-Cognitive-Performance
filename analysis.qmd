@@ -11,7 +11,7 @@ editor: visual
 -   Understand the effects of sleep deprivation (hours of sleep, sleep quality, daytime sleep) and behavioral determinants of health (BMI, caffeine intake, physical activity level) on cognitive performance (attention, working memory, reaction speed, emotion regulation).
 -   Model each cognitive performance metric using sleep and behavioral health features.
 
-### Read Data
+## Read Data
 
 ```{r read_data}
 library(readr)
@@ -19,6 +19,8 @@ library(readr)
 df <- read_csv("sleep_deprivation_dataset_detailed.csv")
 head(df)
 ```
+
+## Exploratory Data Analysis (EDA)
 
 ### Data Structure
 
@@ -102,7 +104,7 @@ p_discrete <- ggplot(discrete_long, aes(x = value, y = n, fill = variable)) +
   facet_wrap(~ variable, scales = "free", ncol = 3) +
   labs(
     title    = "Univariate Distributions — Discrete & Categorical Variables",
-    subtitle = "Count per category",
+    subtitle = "Count per class",
     x = NULL, y = "Count"
   ) +
   theme_minimal(base_size = 12) +
@@ -285,7 +287,7 @@ print(p_hours_age)
 print(p_quality_age)
 ```
 
-### Clustering
+## Clustering
 
 ```{r cluster_by_sleep_group}
 library(tidyverse)
@@ -503,184 +505,10 @@ print(p_box)
 
 ## Models
 
+1\) Start with OLS as a baseline
+
 ```{r}
-# =============================================================================
-# Cognitive Performance Models: Stepwise Selection + LASSO Regularization
-# Outcomes:  Stroop_Task_Reaction_Time, N_Back_Accuracy, PVT_Reaction_Time
-# Predictors: Sleep (Hours, Quality, Sleepiness), Caffeine, Age, Gender, BMI
-# =============================================================================
 
-library(tidyverse)
-library(glmnet)
-library(MASS)  # for stepAIC
-
-# NOTE: Assumes df is already loaded with Gender as factor
-
-# =============================================================================
-# SETUP
-# =============================================================================
-outcomes <- c("Stroop_Task_Reaction_Time", "N_Back_Accuracy", "PVT_Reaction_Time")
-
-predictors <- c(
-  "Sleep_Hours", "Sleep_Quality_Score", "Daytime_Sleepiness",
-  "Caffeine_Intake",
-  "Age", "Gender", "BMI"
-)
-
-# Clean working copy — only keep needed columns, drop NA rows
-model_df <- df %>%
-  dplyr::select(all_of(c(outcomes, predictors))) %>%
-  drop_na()
-
-cat("Rows used for modeling:", nrow(model_df), "\n")
-
-# =============================================================================
-# METHOD 1: STEPWISE SELECTION (AIC-based, bidirectional)
-# =============================================================================
-run_stepwise <- function(outcome, data, predictors) {
-  full_formula <- as.formula(paste(outcome, "~", paste(predictors, collapse = " + ")))
-  null_formula <- as.formula(paste(outcome, "~ 1"))
-
-  full_model <- lm(full_formula, data = data)
-  null_model <- lm(null_formula, data = data)
-
-  # Bidirectional stepwise (both forward and backward)
-  step_model <- stepAIC(
-    null_model,
-    scope = list(lower = null_formula, upper = full_formula),
-    direction = "both",
-    trace = FALSE
-  )
-
-  cat("\n", strrep("=", 60), "\n")
-  cat("STEPWISE —", outcome, "\n")
-  cat(strrep("=", 60), "\n")
-  cat("Selected formula: "); print(formula(step_model))
-  print(summary(step_model))
-
-  step_model
-}
-
-step_stroop <- run_stepwise("Stroop_Task_Reaction_Time", model_df, predictors)
-step_nback  <- run_stepwise("N_Back_Accuracy",           model_df, predictors)
-step_pvt    <- run_stepwise("PVT_Reaction_Time",         model_df, predictors)
-
-# =============================================================================
-# METHOD 2: LASSO REGULARIZATION (cv.glmnet, alpha = 1)
-# =============================================================================
-
-# glmnet needs a numeric matrix — encode Gender as 0/1
-model_df_num <- model_df %>%
-  mutate(Gender = as.numeric(factor(Gender)) - 1)
-
-run_lasso <- function(outcome, data, predictors) {
-  X <- data %>% dplyr::select(all_of(predictors)) %>% as.matrix()
-  y <- data[[outcome]]
-  X_scaled <- scale(X)
-
-  set.seed(42)
-  cv_fit <- cv.glmnet(X_scaled, y, alpha = 1, nfolds = 10)
-
-  coef_1se     <- coef(cv_fit, s = "lambda.1se")
-  selected     <- rownames(coef_1se)[coef_1se[, 1] != 0]
-  selected     <- selected[selected != "(Intercept)"]
-
-  y_hat  <- as.vector(predict(cv_fit, newx = X_scaled, s = "lambda.min"))
-  r2     <- 1 - sum((y - y_hat)^2) / sum((y - mean(y))^2)
-
-  cat("\n", strrep("=", 60), "\n")
-  cat("LASSO —", outcome, "\n")
-  cat(strrep("=", 60), "\n")
-  cat("lambda.min:", round(cv_fit$lambda.min, 4),
-      " | lambda.1se:", round(cv_fit$lambda.1se, 4), "\n")
-  cat("R² at lambda.min:", round(r2, 3), "\n")
-  cat("Selected predictors (lambda.1se):",
-      ifelse(length(selected) > 0, paste(selected, collapse = ", "), "None"), "\n")
-  cat("\nCoefficients at lambda.1se:\n")
-  print(coef_1se[coef_1se[, 1] != 0, , drop = FALSE])
-
-  list(cv_fit = cv_fit, selected = selected, r2 = r2, outcome = outcome)
-}
-
-lasso_stroop <- run_lasso("Stroop_Task_Reaction_Time", model_df_num, predictors)
-lasso_nback  <- run_lasso("N_Back_Accuracy",           model_df_num, predictors)
-lasso_pvt    <- run_lasso("PVT_Reaction_Time",         model_df_num, predictors)
-
-# =============================================================================
-# LASSO CV PLOTS
-# =============================================================================
-par(mfrow = c(1, 3))
-plot(lasso_stroop$cv_fit, main = "LASSO — Stroop RT")
-plot(lasso_nback$cv_fit,  main = "LASSO — N-Back Accuracy")
-plot(lasso_pvt$cv_fit,    main = "LASSO — PVT RT")
-par(mfrow = c(1, 1))
-
-# =============================================================================
-# LASSO → OLS REFIT on selected variables (unbiased coefs for reporting)
-# =============================================================================
-refit_ols <- function(lasso_result, data) {
-  vars    <- lasso_result$selected
-  outcome <- lasso_result$outcome
-
-  if (length(vars) == 0) {
-    cat("\nNo variables selected by LASSO for", outcome, "— skipping OLS refit.\n")
-    return(NULL)
-  }
-
-  formula <- as.formula(paste(outcome, "~", paste(vars, collapse = " + ")))
-  ols     <- lm(formula, data = data)
-
-  cat("\n--- OLS Refit on LASSO-selected vars:", outcome, "---\n")
-  print(summary(ols))
-  ols
-}
-
-ols_stroop <- refit_ols(lasso_stroop, model_df)
-ols_nback  <- refit_ols(lasso_nback,  model_df)
-ols_pvt    <- refit_ols(lasso_pvt,    model_df)
-
-# =============================================================================
-# SUMMARY COMPARISON TABLE
-# =============================================================================
-extract_step_stats <- function(model, label, method) {
-  s   <- summary(model)
-  f   <- s$fstatistic
-  if (is.null(f)) return(tibble(Method=method, Outcome=label, R2=NA, Adj_R2=NA, p_value=NA, Selected_Vars="(intercept only)"))
-  tibble(
-    Method        = method,
-    Outcome       = label,
-    R2            = round(s$r.squared, 3),
-    Adj_R2        = round(s$adj.r.squared, 3),
-    p_value       = round(pf(f[1], f[2], f[3], lower.tail = FALSE), 4),
-    Selected_Vars = paste(names(coef(model))[-1], collapse = ", ")
-  )
-}
-
-extract_lasso_stats <- function(lasso_result, label) {
-  tibble(
-    Method        = "LASSO",
-    Outcome       = label,
-    R2            = round(lasso_result$r2, 3),
-    Adj_R2        = NA,
-    p_value       = NA,
-    Selected_Vars = ifelse(length(lasso_result$selected) > 0,
-                           paste(lasso_result$selected, collapse = ", "), "None")
-  )
-}
-
-comparison <- bind_rows(
-  extract_step_stats(step_stroop,  "Stroop RT",       "Stepwise"),
-  extract_step_stats(step_nback,   "N-Back Accuracy", "Stepwise"),
-  extract_step_stats(step_pvt,     "PVT RT",          "Stepwise"),
-  extract_lasso_stats(lasso_stroop, "Stroop RT"),
-  extract_lasso_stats(lasso_nback,  "N-Back Accuracy"),
-  extract_lasso_stats(lasso_pvt,    "PVT RT")
-) %>% arrange(Outcome, Method)
-
-cat("\n", strrep("=", 60), "\n")
-cat("FINAL COMPARISON TABLE\n")
-cat(strrep("=", 60), "\n")
-print(comparison, width = Inf)
 ```
 
 ```{r}
