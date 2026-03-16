@@ -47,34 +47,14 @@ Note:
 
 ### Univariate Distrubutions
 
-```{r continuous_dists}
+```{r}
 library(ggplot2)
 library(tidyverse)
 library(dplyr)
+library(patchwork)
 
-continuous_vars <- c(
-  "Sleep_Hours", "Sleep_Quality_Score", "Daytime_Sleepiness",
-  "Stroop_Task_Reaction_Time", "N_Back_Accuracy",
-  "Emotion_Regulation_Score", "PVT_Reaction_Time",
-  "Age", "BMI", "Stress_Level"
-)
-
-df_long_cont <- df |>
-  select(all_of(continuous_vars)) |>
-  pivot_longer(everything(), names_to = "variable", values_to = "value") |>
-  mutate(variable = str_replace_all(variable, "_", " "))
-
-p_continuous <- ggplot(df_long_cont, aes(x = value)) +
-  geom_histogram(aes(y = after_stat(density)),
-                 bins = 30, fill = "#4C72B0", color = "white", alpha = 0.8) +
-  geom_density(color = "#C44E52", linewidth = 0.8) +
-  facet_wrap(~ variable, scales = "free", ncol = 4) +
-  labs(
-    title    = "Univariate Distributions — Continuous Variables",
-    subtitle = "Histogram with density overlay",
-    x = NULL, y = "Density"
-  ) +
-  theme_minimal(base_size = 12) +
+# ── Shared theme ──────────────────────────────────────────────────────────────
+dist_theme <- theme_minimal(base_size = 12) +
   theme(
     plot.title       = element_text(face = "bold", size = 14),
     plot.subtitle    = element_text(color = "grey50", size = 11),
@@ -83,40 +63,168 @@ p_continuous <- ggplot(df_long_cont, aes(x = value)) +
     axis.text.x      = element_text(size = 7)
   )
 
-p_continuous
-```
+# ── Helper: per-variable binwidth + unit labels ───────────────────────────────
+plot_faceted_binwidth_units <- function(data, var_binwidths, var_units, var_titles,
+                                        title, subtitle, fill_color, ncol = 3) {
+  vars  <- names(var_binwidths)
+  plots <- map(vars, function(v) {
+    bw         <- var_binwidths[[v]]
+    panel_title <- var_titles[[v]]
+    xlab       <- var_units[[v]]
+    ggplot(data, aes(x = .data[[v]])) +
+      geom_histogram(aes(y = after_stat(density)),
+                     binwidth = bw, fill = fill_color,
+                     color = "white", alpha = 0.8) +
+      geom_density(color = "#C44E52", linewidth = 0.8) +
+      labs(title = panel_title, x = xlab, y = "Density") +
+      dist_theme +
+      theme(
+        plot.title   = element_text(face = "bold", size = 10),
+        axis.title.x = element_text(size = 8, color = "grey40")
+      )
+  })
 
-```{r discrete_dists}
-library(ggplot2)
-library(tidyverse)
-library(dplyr)
+  wrap_plots(plots, ncol = ncol) +
+    plot_annotation(
+      title    = title,
+      subtitle = subtitle,
+      theme    = theme(
+        plot.title    = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(color = "grey50", size = 11)
+      )
+    )
+}
 
-discrete_long <- bind_rows(
-  df |> count(value = factor(Caffeine_Intake))       |> mutate(variable = "Caffeine Intake (1–5)"),
-  df |> count(value = factor(Physical_Activity_Level)) |> mutate(variable = "Physical Activity Level (1–10)"),
-  df |> count(value = factor(Gender))                |> mutate(variable = "Gender")
+# ── 1. Sleep Variables ────────────────────────────────────────────────────────
+sleep_binwidths <- c(
+  Sleep_Hours         = 0.5,
+  Sleep_Quality_Score = 2,
+  Daytime_Sleepiness  = 2
+)
+sleep_titles <- c(
+  Sleep_Hours         = "Sleep Hours",
+  Sleep_Quality_Score = "Sleep Quality Score",
+  Daytime_Sleepiness  = "Daytime Sleepiness"
+)
+sleep_units <- c(
+  Sleep_Hours         = "Duration (hours)",
+  Sleep_Quality_Score = "Quality Score (0–20)",
+  Daytime_Sleepiness  = "Sleepiness Score (0–25)"
 )
 
-p_discrete <- ggplot(discrete_long, aes(x = value, y = n, fill = variable)) +
+p_sleep <- plot_faceted_binwidth_units(
+  data          = df,
+  var_binwidths = sleep_binwidths,
+  var_units     = sleep_units,
+  var_titles    = sleep_titles,
+  title         = "Distributions of Sleep Variables",
+  subtitle      = "Histogram with density overlay  |  n = 60",
+  fill_color    = "#4C72B0",
+  ncol          = 3
+)
+p_sleep
+
+# ── 2. Cognitive Performance Variables ───────────────────────────────────────
+cognitive_binwidths <- c(
+  Stroop_Task_Reaction_Time = 0.25,
+  N_Back_Accuracy           = 5,
+  Emotion_Regulation_Score  = 5,
+  PVT_Reaction_Time         = 25
+)
+cognitive_titles <- c(
+  Stroop_Task_Reaction_Time = "Stroop Task Reaction Time",
+  N_Back_Accuracy           = "N-Back Accuracy",
+  Emotion_Regulation_Score  = "Emotion Regulation Score",
+  PVT_Reaction_Time         = "PVT Reaction Time"
+)
+cognitive_units <- c(
+  Stroop_Task_Reaction_Time = "Reaction Time (seconds)",
+  N_Back_Accuracy           = "Accuracy (% correct)",
+  Emotion_Regulation_Score  = "Score (0–70)",
+  PVT_Reaction_Time         = "Reaction Time (milliseconds)"
+)
+
+p_cognitive <- plot_faceted_binwidth_units(
+  data          = df,
+  var_binwidths = cognitive_binwidths,
+  var_units     = cognitive_units,
+  var_titles    = cognitive_titles,
+  title         = "Distributions of Cognitive Performance Variables",
+  subtitle      = "Histogram with density overlay  |  n = 60",
+  fill_color    = "#55A868",
+  ncol          = 2
+)
+p_cognitive
+
+# ── 3. Lifestyle Covariates (Continuous) ─────────────────────────────────────
+lifestyle_binwidths <- c(
+  Age          = 2,
+  BMI          = 1.5,
+  Stress_Level = 4
+)
+lifestyle_titles <- c(
+  Age          = "Age",
+  BMI          = "BMI",
+  Stress_Level = "Stress Level"
+)
+lifestyle_units <- c(
+  Age          = "Age (years)",
+  BMI          = "BMI (kg/m²)",
+  Stress_Level = "Stress Score (0–40)"
+)
+
+p_lifestyle_cont <- plot_faceted_binwidth_units(
+  data          = df,
+  var_binwidths = lifestyle_binwidths,
+  var_units     = lifestyle_units,
+  var_titles    = lifestyle_titles,
+  title         = "Lifestyle Covariates (Continuous)",
+  subtitle      = "Histogram with density overlay  |  n = 60",
+  fill_color    = "#DD8452",
+  ncol          = 3
+)
+p_lifestyle_cont
+
+# ── 4. Discrete / Categorical Covariates ─────────────────────────────────────
+lifestyle_discrete_long <- bind_rows(
+  df |> count(value = factor(Caffeine_Intake))         |> mutate(variable = "Caffeine Intake (cups/day)"),
+  df |> count(value = factor(Physical_Activity_Level)) |> mutate(variable = "Physical Activity Level (1–10)"),
+  df |> count(value = factor(Gender))                  |> mutate(variable = "Gender")
+)
+
+p_lifestyle_disc <- ggplot(lifestyle_discrete_long,
+                           aes(x = value, y = n, fill = variable)) +
   geom_col(show.legend = FALSE, width = 0.6, alpha = 0.85) +
   geom_text(aes(label = n), vjust = -0.4, size = 3) +
   scale_fill_brewer(palette = "Set2") +
   facet_wrap(~ variable, scales = "free", ncol = 3) +
   labs(
-    title    = "Univariate Distributions — Discrete & Categorical Variables",
-    subtitle = "Count per class",
-    x = NULL, y = "Count"
+    title    = "Lifestyle Covariates (Discrete / Categorical)",
+    subtitle = "Count per class  |  n = 60  |  Caffeine: 0–5 cups/day, Physical Activity: 1–10 scale",
+    x        = NULL,
+    y        = "Count"
   ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title        = element_text(face = "bold", size = 14),
-    plot.subtitle     = element_text(color = "grey50", size = 11),
-    strip.text        = element_text(face = "bold", size = 9),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor  = element_blank()
-  )
+  dist_theme +
+  theme(panel.grid.major.x = element_blank())
 
-p_discrete
+# ── Remove individual titles from sub-plots before combining ─────────────────
+p_lifestyle_cont_notitle <- p_lifestyle_cont &
+  theme(plot.title = element_blank(), plot.subtitle = element_blank())
+
+p_lifestyle_disc_notitle <- p_lifestyle_disc +
+  labs(title = NULL, subtitle = NULL)
+
+# ── Combined figure ───────────────────────────────────────────────────────────
+(p_lifestyle_cont_notitle / p_lifestyle_disc_notitle) +
+  plot_annotation(
+    title    = "Lifestyle Covariates  |  n = 60",
+    subtitle = "Top: continuous variables (histograms with density overlay)\nBottom: discrete and categorical variables (counts per class)",
+    theme    = theme(
+      plot.title    = element_text(face = "bold", size = 15),
+      plot.subtitle = element_text(color = "grey50", size = 11)
+    )
+  ) +
+  plot_layout(heights = c(1.2, 1))
 ```
 
 ### Correlation Matrix
@@ -176,632 +284,765 @@ library(tidyverse)
 library(ggplot2)
 library(dplyr)
 
-plot_sleep_vs_cognition <- function(data, sleep_var, sleep_label) {
-  
+plot_sleep_vs_cognition <- function(data, sleep_var, sleep_label, sleep_unit) {
+
   cognitive_vars <- c(
     "Stroop_Task_Reaction_Time",
     "N_Back_Accuracy",
     "Emotion_Regulation_Score",
     "PVT_Reaction_Time"
   )
-  
+
+  # Descriptive panel titles with units
+  outcome_labels <- c(
+    "Stroop_Task_Reaction_Time" = "Stroop Task Reaction Time (seconds)",
+    "N_Back_Accuracy"           = "N-Back Accuracy (% correct)",
+    "Emotion_Regulation_Score"  = "Emotion Regulation Score (0–70)",
+    "PVT_Reaction_Time"         = "PVT Reaction Time (milliseconds)"
+  )
+
   data |>
     select(all_of(c(sleep_var, cognitive_vars))) |>
     pivot_longer(-all_of(sleep_var), names_to = "outcome", values_to = "value") |>
-    mutate(outcome = str_replace_all(outcome, "_", " ")) |>
+    mutate(outcome = recode(outcome, !!!outcome_labels)) |>
     ggplot(aes(x = .data[[sleep_var]], y = value)) +
     geom_point(alpha = 0.4, size = 1.8, color = "#4C72B0") +
     geom_smooth(method = "lm", se = TRUE, color = "#C44E52", linewidth = 1) +
     facet_wrap(~ outcome, scales = "free_y", ncol = 2) +
     labs(
-      title    = paste("Sleep vs. Cognitive Outcomes —", sleep_label),
+      title    = paste("Sleep vs. Cognitive Outcomes:", sleep_label),
       subtitle = "Linear fit with 95% confidence interval",
-      x        = sleep_label,
+      x        = sleep_unit,
       y        = NULL
-    ) +
-    theme_minimal(base_size = 13) +
-    theme(
-      plot.title     = element_text(face = "bold", size = 15),
-      plot.subtitle  = element_text(color = "grey50", size = 11),
-      strip.text     = element_text(face = "bold", size = 10),
-      panel.grid.minor = element_blank()
-    )
-}
-
-# ── Generate both plots ───────────────────────────────────────────────────────
-p_hours   <- plot_sleep_vs_cognition(df, "Sleep_Hours",         "Sleep Hours")
-p_quality <- plot_sleep_vs_cognition(df, "Sleep_Quality_Score", "Sleep Quality Score")
-
-print(p_hours)
-print(p_quality)
-```
-
-### Binned Scatterplots
-
-```{r binned_scatterplots}
-library(tidyverse)
-library(ggplot2)
-library(dplyr)
-
-df <- df |>
-  mutate(Age_Group = cut(Age,
-                         breaks = c(-Inf, 25, 35, 45, Inf),
-                         labels = c("≤25", "26–35", "36–45", "46+")))
-
-plot_binned <- function(data, sleep_var, sleep_label, group_var, group_label) {
-  
-  cognitive_vars <- c(
-    "Stroop_Task_Reaction_Time",
-    "N_Back_Accuracy",
-    "Emotion_Regulation_Score",
-    "PVT_Reaction_Time"
-  )
-  
-  data |>
-    select(all_of(c(sleep_var, group_var, cognitive_vars))) |>
-    pivot_longer(-all_of(c(sleep_var, group_var)),
-                 names_to = "outcome", values_to = "value") |>
-    mutate(outcome = str_replace_all(outcome, "_", " ")) |>
-    ggplot(aes(x = .data[[sleep_var]], y = value,
-               color = .data[[group_var]], fill = .data[[group_var]])) +
-    geom_point(alpha = 0.3, size = 1.5) +
-    geom_smooth(method = "lm", se = TRUE, linewidth = 1, alpha = 0.15) +
-    facet_wrap(~ outcome, scales = "free_y", ncol = 2) +
-    labs(
-      title    = paste("Sleep vs. Cognitive Outcomes —", sleep_label),
-      subtitle = paste("By", group_label, "| Linear fit with 95% CI"),
-      x        = sleep_label,
-      y        = NULL,
-      color    = group_label,
-      fill     = group_label
     ) +
     theme_minimal(base_size = 13) +
     theme(
       plot.title       = element_text(face = "bold", size = 15),
       plot.subtitle    = element_text(color = "grey50", size = 11),
       strip.text       = element_text(face = "bold", size = 10),
-      panel.grid.minor = element_blank(),
-      legend.position  = "bottom"
+      panel.grid.minor = element_blank()
     )
 }
 
+# ── Generate both plots ───────────────────────────────────────────────────────
+p_hours   <- plot_sleep_vs_cognition(
+  data        = df,
+  sleep_var   = "Sleep_Hours",
+  sleep_label = "Sleep Hours",
+  sleep_unit  = "Sleep Duration (hours)"
+)
 
-p_hours_gender   <- plot_binned(df, "Sleep_Hours",         "Sleep Hours",         "Gender", "Gender")
-p_quality_gender <- plot_binned(df, "Sleep_Quality_Score", "Sleep Quality Score", "Gender", "Gender")
+p_quality <- plot_sleep_vs_cognition(
+  data        = df,
+  sleep_var   = "Sleep_Quality_Score",
+  sleep_label = "Sleep Quality Score",
+  sleep_unit  = "Sleep Quality Score (0–20)"
+)
 
-p_hours_age   <- plot_binned(df, "Sleep_Hours",         "Sleep Hours",         "Age_Group", "Age Group")
-p_quality_age <- plot_binned(df, "Sleep_Quality_Score", "Sleep Quality Score", "Age_Group", "Age Group")
-
-
-gender_colors <- c("#4C72B0", "#C44E52", "#55A868")  # flexible for 2–3 gender categories
-age_colors    <- c("#4C72B0", "#55A868", "#C44E52", "#8172B2")
-
-p_hours_gender   <- p_hours_gender   + scale_color_manual(values = gender_colors) + scale_fill_manual(values = gender_colors)
-p_quality_gender <- p_quality_gender + scale_color_manual(values = gender_colors) + scale_fill_manual(values = gender_colors)
-p_hours_age      <- p_hours_age      + scale_color_manual(values = age_colors)    + scale_fill_manual(values = age_colors)
-p_quality_age    <- p_quality_age    + scale_color_manual(values = age_colors)    + scale_fill_manual(values = age_colors)
-
-print(p_hours_gender)
-print(p_quality_gender)
-print(p_hours_age)
-print(p_quality_age)
+print(p_hours)
+print(p_quality)
 ```
 
-## Clustering
+### K-Means
 
-```{r cluster_by_sleep_group}
+```{r K-Means: behavioral}
+# ─────────────────────────────────────────────
+# K-Means Clustering: Behavioral Features
+# ─────────────────────────────────────────────
+
 library(tidyverse)
-library(dplyr)
+library(cluster)
+library(factoextra)
+library(patchwork)
 
-df <- df |>
-  mutate(Sleep_Group = cut(Sleep_Hours,
-                           breaks = c(-Inf, 5, 6, 7, 9, Inf),
-                           labels = c("Minimal\n(<5h)", "Poor\n(5–6h)",
-                                      "Decent\n(6–7h)", "Sufficient\n(7–9h)",
-                                      "Excessive\n(>9h)")))
+# ── 1. Prep behavioral features ──────────────
+behav_vars <- c("BMI", "Caffeine_Intake", "Physical_Activity_Level", "Stress_Level")
 
-# ── Pivot cognitive outcomes to long format ───────────────────────────────────
-cognitive_vars <- c(
-  "Stroop_Task_Reaction_Time",
-  "N_Back_Accuracy",
-  "Emotion_Regulation_Score",
-  "PVT_Reaction_Time"
-)
+df_behav <- df %>%
+  select(all_of(behav_vars)) %>%
+  drop_na() %>%
+  scale() %>%
+  as.data.frame()
 
-df_long <- df |>
-  select(Sleep_Hours, Sleep_Group, all_of(cognitive_vars)) |>
-  pivot_longer(-c(Sleep_Hours, Sleep_Group),
-               names_to = "outcome", values_to = "value") |>
-  mutate(outcome = str_replace_all(outcome, "_", " "))
+# ── 2. Elbow plot (WSS) ───────────────────────
+set.seed(42)
+wss <- map_dbl(1:10, function(k) {
+  kmeans(df_behav, centers = k, nstart = 25, iter.max = 100)$tot.withinss
+})
 
-# ── Color palette: intuitive red → green spectrum ────────────────────────────
-sleep_colors <- c(
-  "Minimal\n(<5h)"    = "#C44E52",
-  "Poor\n(5–6h)"      = "#DD8452",
-  "Decent\n(6–7h)"    = "#CCB974",
-  "Sufficient\n(7–9h)"= "#55A868",
-  "Excessive\n(>9h)"  = "#4C72B0"
-)
+elbow_df <- tibble(k = 1:10, wss = wss)
 
-# ── Plot ──────────────────────────────────────────────────────────────────────
-p <- ggplot(df_long, aes(x = Sleep_Hours, y = value,
-                         color = Sleep_Group, fill = Sleep_Group)) +
-  geom_point(alpha = 0.4, size = 1.8) +
-  geom_smooth(method = "lm", se = TRUE, linewidth = 1, alpha = 0.15) +
-  scale_color_manual(values = sleep_colors, name = "Sleep Duration") +
-  scale_fill_manual(values  = sleep_colors, name = "Sleep Duration") +
-  facet_wrap(~ outcome, scales = "free_y", ncol = 2) +
+p_elbow <- ggplot(elbow_df, aes(x = k, y = wss)) +
+  geom_line(color = "#4C72B0", linewidth = 1) +
+  geom_point(size = 3, color = "#4C72B0") +
+  scale_x_continuous(breaks = 1:10) +
   labs(
-    title    = "Sleep Hours vs. Cognitive Outcomes by Sleep Duration Group",
-    subtitle = "Each group has its own linear fit | Points colored by sleep duration bin",
-    x        = "Sleep Hours",
-    y        = NULL
+    title = "Elbow Method: Optimal k",
+    x = "Number of Clusters (k)",
+    y = "Total Within-Cluster SS"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+
+print(p_elbow)
+
+# ── 3. Fit final model (set k after inspecting elbow) ──
+k_final <- 3  # ← adjust after viewing elbow plot
+
+km_fit <- kmeans(df_behav, centers = k_final, nstart = 25, iter.max = 100)
+
+# Attach cluster labels back to original (unscaled) rows
+df_clustered <- df %>%
+  drop_na(all_of(behav_vars)) %>%
+  mutate(cluster = factor(km_fit$cluster))
+
+# ── 4. PCA scatter ────────────────────────────
+pca_out  <- prcomp(df_behav)
+pca_df   <- as.data.frame(pca_out$x[, 1:2]) %>%
+  mutate(cluster = factor(km_fit$cluster))
+
+var_exp  <- round(summary(pca_out)$importance[2, 1:2] * 100, 1)
+
+p_pca <- ggplot(pca_df, aes(x = PC1, y = PC2, color = cluster, fill = cluster)) +
+  geom_point(size = 3, alpha = 0.8, shape = 21, color = "white", stroke = 0.4,
+             aes(fill = cluster)) +
+  stat_ellipse(geom = "polygon", alpha = 0.12, linewidth = 0.6) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    title = "K-Means Clusters (PCA Space)",
+    x = paste0("PC1 (", var_exp[1], "% variance)"),
+    y = paste0("PC2 (", var_exp[2], "% variance)"),
+    fill = "Cluster", color = "Cluster"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+
+# ── 5. Faceted boxplots by cluster ───────────
+df_long <- df_clustered %>%
+  select(all_of(behav_vars), cluster) %>%
+  pivot_longer(cols = all_of(behav_vars),
+               names_to = "feature",
+               values_to = "value") %>%
+  mutate(feature = recode(feature,
+    "BMI"                   = "BMI",
+    "Caffeine_Intake"       = "Caffeine Intake",
+    "Physical_Activity_Level" = "Physical Activity",
+    "Stress_Level"          = "Stress Level"
+  ))
+
+p_box <- ggplot(df_long, aes(x = cluster, y = value, fill = cluster)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 2) +
+  geom_jitter(width = 0.15, alpha = 0.4, size = 1.5) +
+  facet_wrap(~ feature, scales = "free_y", ncol = 2) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Behavioral Features by Cluster",
+    x = "Cluster", y = "Value", fill = "Cluster"
   ) +
   theme_minimal(base_size = 13) +
   theme(
-    plot.title       = element_text(face = "bold", size = 15),
-    plot.subtitle    = element_text(color = "grey50", size = 11),
-    strip.text       = element_text(face = "bold", size = 10),
-    panel.grid.minor = element_blank(),
-    legend.position  = "bottom",
-    legend.title     = element_text(face = "bold"),
-    legend.text      = element_text(size = 9)
-  ) +
-  guides(color = guide_legend(nrow = 1, override.aes = list(alpha = 1, size = 3)),
-         fill  = guide_legend(nrow = 1))
+    plot.title   = element_text(face = "bold"),
+    legend.position = "none"
+  )
 
-p
+# ── 6. Combined layout ────────────────────────
+(p_pca | p_box) +
+  plot_annotation(
+    title   = "K-Means Clustering: Behavioral Health Profiles",
+    subtitle = paste0("k = ", k_final, " | Features: BMI, Caffeine, Physical Activity, Stress"),
+    theme   = theme(
+      plot.title    = element_text(face = "bold", size = 15),
+      plot.subtitle = element_text(size = 11, color = "grey40")
+    )
+  )
+
+# ── 7. Cluster summary table ──────────────────
+df_clustered %>%
+  group_by(cluster) %>%
+  summarise(
+    n                = n(),
+    BMI_mean         = round(mean(BMI, na.rm = TRUE), 2),
+    Caffeine_mean    = round(mean(Caffeine_Intake, na.rm = TRUE), 2),
+    PhysActivity_mean = round(mean(Physical_Activity_Level, na.rm = TRUE), 2),
+    Stress_mean      = round(mean(Stress_Level, na.rm = TRUE), 2)
+  ) %>%
+  print()
 ```
 
 ```{r}
-cognitive_vars <- c(
-  "Stroop_Task_Reaction_Time", "N_Back_Accuracy",
-  "Emotion_Regulation_Score",  "PVT_Reaction_Time"
-)
+# ─────────────────────────────────────────────
+# K-Means Clustering: Sleep + Cognitive Features
+# ─────────────────────────────────────────────
 
-df_scaled <- df |>
-  select(all_of(cognitive_vars)) |>
-  scale() |>
-  as.data.frame()
+library(tidyverse)
+library(patchwork)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 2. ELBOW PLOT — choose optimal k
-# ══════════════════════════════════════════════════════════════════════════════
-set.seed(42)
-wss <- map_dbl(1:8, ~ kmeans(df_scaled, centers = .x, nstart = 25)$tot.withinss)
-
-p_elbow <- tibble(k = 1:8, wss = wss) |>
-  ggplot(aes(x = k, y = wss)) +
-  geom_line(linewidth = 1, color = "grey50") +
-  geom_point(size = 4, color = "#4C72B0") +
-  scale_x_continuous(breaks = 1:8) +
-  labs(
-    title    = "Elbow Plot — K-Means on Cognitive Outcomes",
-    subtitle = "Look for the 'elbow' where WSS stops dropping sharply",
-    x        = "Number of Clusters (k)",
-    y        = "Total Within-Cluster SS"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    plot.title    = element_text(face = "bold", size = 15),
-    plot.subtitle = element_text(color = "grey50", size = 11),
-    panel.grid.minor = element_blank()
-  )
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 3. FIT K-MEANS  (change k here after inspecting elbow plot)
-# ══════════════════════════════════════════════════════════════════════════════
-k <- 3
-km <- kmeans(df_scaled, centers = k, nstart = 25)
-
-df <- df |>
-  mutate(Cluster = factor(km$cluster, labels = paste("Cluster", 1:k)))
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 4. SCATTER — Sleep Hours vs. each cognitive outcome, colored by cluster
-# ══════════════════════════════════════════════════════════════════════════════
-df_long <- df |>
-  select(Sleep_Hours, Sleep_Quality_Score, Cluster, all_of(cognitive_vars)) |>
-  pivot_longer(-c(Sleep_Hours, Sleep_Quality_Score, Cluster),
-               names_to = "outcome", values_to = "value") |>
-  mutate(outcome = str_replace_all(outcome, "_", " "))
-
-cluster_colors <- c("#4C72B0", "#C44E52", "#55A868", "#8172B2", "#CCB974")
-
-p_scatter_hours <- ggplot(df_long,
-                          aes(x = Sleep_Hours, y = value,
-                              color = Cluster, fill = Cluster)) +
-  geom_point(alpha = 0.4, size = 1.8) +
-  geom_smooth(method = "lm", se = TRUE, linewidth = 1, alpha = 0.15) +
-  scale_color_manual(values = cluster_colors) +
-  scale_fill_manual(values  = cluster_colors) +
-  facet_wrap(~ outcome, scales = "free_y", ncol = 2) +
-  labs(
-    title    = "Sleep Hours vs. Cognitive Outcomes by Cluster",
-    subtitle = "Clusters derived from k-means on cognitive performance profile",
-    x        = "Sleep Hours", y = NULL
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    plot.title       = element_text(face = "bold", size = 15),
-    plot.subtitle    = element_text(color = "grey50", size = 11),
-    strip.text       = element_text(face = "bold", size = 10),
-    panel.grid.minor = element_blank(),
-    legend.position  = "bottom"
-  )
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 5. CLUSTER PROFILE PLOT — what does each cluster actually look like?
-# ══════════════════════════════════════════════════════════════════════════════
-# Mean of all key variables per cluster, normalized for comparability
-profile_vars <- c(
+# ── 1. Prep sleep + cognitive features ───────
+sleep_cog_vars <- c(
   "Sleep_Hours", "Sleep_Quality_Score", "Daytime_Sleepiness",
   "Stroop_Task_Reaction_Time", "N_Back_Accuracy",
-  "Emotion_Regulation_Score", "PVT_Reaction_Time", "Stress_Level"
+  "PVT_Reaction_Time", "Emotion_Regulation_Score"
 )
 
-cluster_profiles <- df |>
-  select(Cluster, all_of(profile_vars)) |>
-  group_by(Cluster) |>
-  summarise(across(everything(), mean), .groups = "drop") |>
-  pivot_longer(-Cluster, names_to = "variable", values_to = "mean_val") |>
-  group_by(variable) |>
-  mutate(scaled_mean = scale(mean_val)[,1]) |>  # z-score across clusters
-  ungroup() |>
-  mutate(variable = str_replace_all(variable, "_", " "))
+df_sc <- df %>%
+  select(all_of(sleep_cog_vars)) %>%
+  drop_na() %>%
+  scale() %>%
+  as.data.frame()
 
-p_profile <- ggplot(cluster_profiles,
-                    aes(x = variable, y = scaled_mean,
-                        color = Cluster, group = Cluster)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey70") +
-  geom_line(linewidth = 1.2) +
-  geom_point(size = 3.5) +
-  scale_color_manual(values = cluster_colors) +
-  scale_x_discrete(guide = guide_axis(angle = 40)) +
+# ── 2. Elbow plot (WSS) ───────────────────────
+set.seed(42)
+wss <- map_dbl(1:10, function(k) {
+  kmeans(df_sc, centers = k, nstart = 25, iter.max = 100)$tot.withinss
+})
+
+elbow_df <- tibble(k = 1:10, wss = wss)
+
+p_elbow <- ggplot(elbow_df, aes(x = k, y = wss)) +
+  geom_line(color = "#DD8452", linewidth = 1) +
+  geom_point(size = 3, color = "#DD8452") +
+  scale_x_continuous(breaks = 1:10) +
   labs(
-    title    = "Cluster Profiles — Mean Variable Values (Z-Scored)",
-    subtitle = "Values above 0 = above average; below 0 = below average",
-    x        = NULL, y        = "Z-Score"
+    title = "Elbow Method: Optimal k",
+    x = "Number of Clusters (k)",
+    y = "Total Within-Cluster SS"
   ) +
   theme_minimal(base_size = 13) +
-  theme(
-    plot.title       = element_text(face = "bold", size = 15),
-    plot.subtitle    = element_text(color = "grey50", size = 11),
-    panel.grid.minor = element_blank(),
-    legend.position  = "bottom"
-  )
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 6. BOXPLOTS — Sleep Hours per cluster (does sleep vary by cognitive cluster?)
-# ══════════════════════════════════════════════════════════════════════════════
-p_box <- df |>
-  select(Cluster, Sleep_Hours, Sleep_Quality_Score) |>
-  pivot_longer(-Cluster, names_to = "variable", values_to = "value") |>
-  mutate(variable = str_replace_all(variable, "_", " ")) |>
-  ggplot(aes(x = Cluster, y = value, fill = Cluster)) +
-  geom_boxplot(alpha = 0.7, outlier.alpha = 0.4) +
-  scale_fill_manual(values = cluster_colors) +
-  facet_wrap(~ variable, scales = "free_y") +
-  labs(
-    title    = "Sleep Distribution by Cognitive Cluster",
-    subtitle = "Do clusters with better cognition sleep more or better?",
-    x        = NULL, y = NULL
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    plot.title       = element_text(face = "bold", size = 15),
-    plot.subtitle    = element_text(color = "grey50", size = 11),
-    strip.text       = element_text(face = "bold", size = 10),
-    panel.grid.minor = element_blank(),
-    legend.position  = "none"
-  )
+  theme(plot.title = element_text(face = "bold"))
 
 print(p_elbow)
-print(p_scatter_hours)
-print(p_profile)
-print(p_box)
 
+# ── 3. Fit final model (set k after inspecting elbow) ──
+k_final <- 3  # ← adjust after viewing elbow plot
+
+km_fit <- kmeans(df_sc, centers = k_final, nstart = 25, iter.max = 100)
+
+# Attach cluster labels back to original (unscaled) rows
+df_clustered_sc <- df %>%
+  drop_na(all_of(sleep_cog_vars)) %>%
+  mutate(cluster = factor(km_fit$cluster))
+
+# ── 4. PCA scatter ────────────────────────────
+pca_out <- prcomp(df_sc)
+pca_df  <- as.data.frame(pca_out$x[, 1:2]) %>%
+  mutate(cluster = factor(km_fit$cluster))
+
+var_exp <- round(summary(pca_out)$importance[2, 1:2] * 100, 1)
+
+# PCA loadings for reference
+loadings_df <- as.data.frame(pca_out$rotation[, 1:2]) %>%
+  rownames_to_column("variable") %>%
+  mutate(variable = recode(variable,
+    "Sleep_Hours"               = "Sleep Hours",
+    "Sleep_Quality_Score"       = "Sleep Quality",
+    "Daytime_Sleepiness"        = "Daytime Sleepiness",
+    "Stroop_Task_Reaction_Time" = "Stroop RT",
+    "N_Back_Accuracy"           = "N-Back Accuracy",
+    "PVT_Reaction_Time"         = "PVT RT",
+    "Emotion_Regulation_Score"  = "Emotion Regulation"
+  ))
+
+print(loadings_df)  # inspect which variables drive each PC
+
+p_pca <- ggplot(pca_df, aes(x = PC1, y = PC2, fill = cluster)) +
+  geom_point(size = 3, alpha = 0.9, shape = 21, color = "white", stroke = 0.4) +
+  stat_ellipse(geom = "polygon", alpha = 0.12, aes(color = cluster), linewidth = 0.6) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    title = "K-Means Clusters (PCA Space)",
+    x = paste0("PC1 (", var_exp[1], "% variance)"),
+    y = paste0("PC2 (", var_exp[2], "% variance)"),
+    fill = "Cluster", color = "Cluster"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+
+# ── 5. Faceted boxplots by cluster ───────────
+df_long_sc <- df_clustered_sc %>%
+  select(all_of(sleep_cog_vars), cluster) %>%
+  pivot_longer(cols = all_of(sleep_cog_vars),
+               names_to = "feature",
+               values_to = "value") %>%
+  mutate(feature = recode(feature,
+    "Sleep_Hours"               = "Sleep Hours",
+    "Sleep_Quality_Score"       = "Sleep Quality",
+    "Daytime_Sleepiness"        = "Daytime Sleepiness",
+    "Stroop_Task_Reaction_Time" = "Stroop RT",
+    "N_Back_Accuracy"           = "N-Back Accuracy",
+    "PVT_Reaction_Time"         = "PVT RT",
+    "Emotion_Regulation_Score"  = "Emotion Regulation"
+  ))
+
+p_box <- ggplot(df_long_sc, aes(x = cluster, y = value, fill = cluster)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 2) +
+  geom_jitter(width = 0.15, alpha = 0.4, size = 1.5) +
+  facet_wrap(~ feature, scales = "free_y", ncol = 3) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Sleep & Cognitive Features by Cluster",
+    x = "Cluster", y = "Value", fill = "Cluster"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title      = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+# ── 6. Combined layout ────────────────────────
+(p_pca | p_box) +
+  plot_annotation(
+    title    = "K-Means Clustering: Sleep & Cognitive Profiles",
+    subtitle = paste0("k = ", k_final, " | Features: Sleep Hours, Sleep Quality, Daytime Sleepiness, Stroop RT, N-Back Accuracy, PVT RT, Emotion Regulation"),
+    theme    = theme(
+      plot.title    = element_text(face = "bold", size = 15),
+      plot.subtitle = element_text(size = 10, color = "grey40")
+    )
+  )
+
+# ── 7. Cluster summary table ──────────────────
+df_clustered_sc %>%
+  group_by(cluster) %>%
+  summarise(
+    n                      = n(),
+    Sleep_Hours_mean       = round(mean(Sleep_Hours, na.rm = TRUE), 2),
+    Sleep_Quality_mean     = round(mean(Sleep_Quality_Score, na.rm = TRUE), 2),
+    Daytime_Sleep_mean     = round(mean(Daytime_Sleepiness, na.rm = TRUE), 2),
+    Stroop_RT_mean         = round(mean(Stroop_Task_Reaction_Time, na.rm = TRUE), 2),
+    NBack_Acc_mean         = round(mean(N_Back_Accuracy, na.rm = TRUE), 2),
+    PVT_RT_mean            = round(mean(PVT_Reaction_Time, na.rm = TRUE), 2),
+    Emotion_Reg_mean       = round(mean(Emotion_Regulation_Score, na.rm = TRUE), 2)
+  ) %>%
+  print()
 ```
 
 ## Models
 
-1\) Start with OLS as a baseline
+### Stroop Reaction Time
 
 ```{r}
-
-```
-
-```{r}
-library(tidyverse)
-
-print_model_summary <- function(model, label) {
-  cat("\n", strrep("=", 60), "\n")
-  cat("MODEL:", label, "\n")
-  cat(strrep("=", 60), "\n")
-  print(summary(model))
-  cat("\nVIF (Multicollinearity Check):\n")
-  print(car::vif(model))
-  cat("\n")
-}
-
-# =============================================================================
-# PREDICTOR SETS
-# =============================================================================
-sleep_vars       <- c("Sleep_Hours", "Sleep_Quality_Score", "Daytime_Sleepiness")
-demo_vars        <- c("Age", "Gender", "BMI")
-lifestyle_vars   <- c("Caffeine_Intake", "Physical_Activity_Level", "Stress_Level")
-
-all_predictors   <- c(sleep_vars, demo_vars, lifestyle_vars)
-predictor_formula <- paste(all_predictors, collapse = " + ")
-
-# =============================================================================
-# BLOCK 1: COGNITIVE PERFORMANCE OUTCOMES
-# =============================================================================
-
-# --- 1a. Stroop Task Reaction Time -------------------------------------------
-# Higher = slower = worse cognitive inhibition
-model_stroop <- lm(
-  as.formula(paste("Stroop_Task_Reaction_Time ~", predictor_formula)),
-  data = df
-)
-print_model_summary(model_stroop, "Stroop Task Reaction Time")
-
-# --- 1b. N-Back Accuracy -----------------------------------------------------
-# Higher = better working memory
-model_nback <- lm(
-  as.formula(paste("N_Back_Accuracy ~", predictor_formula)),
-  data = df
-)
-print_model_summary(model_nback, "N-Back Accuracy")
-
-# --- 1c. PVT Reaction Time ---------------------------------------------------
-# Higher = slower = worse sustained attention
-model_pvt <- lm(
-  as.formula(paste("PVT_Reaction_Time ~", predictor_formula)),
-  data = df
-)
-print_model_summary(model_pvt, "PVT Reaction Time")
-
-# =============================================================================
-# BLOCK 2: STRESS & EMOTION REGULATION OUTCOMES
-# =============================================================================
-
-# NOTE: Stress_Level is used as predictor for cognitive models above,
-# but here we model it as an outcome — remove it from predictors to avoid
-# circularity, and use sleep + demographics + activity instead.
-
-stress_predictors <- c(sleep_vars, demo_vars, "Caffeine_Intake", "Physical_Activity_Level")
-stress_formula    <- paste(stress_predictors, collapse = " + ")
-
-# --- 2a. Stress Level --------------------------------------------------------
-model_stress <- lm(
-  as.formula(paste("Stress_Level ~", stress_formula)),
-  data = df
-)
-print_model_summary(model_stress, "Stress Level")
-
-# --- 2b. Emotion Regulation Score --------------------------------------------
-model_emotion <- lm(
-  as.formula(paste("Emotion_Regulation_Score ~", stress_formula)),
-  data = df
-)
-print_model_summary(model_emotion, "Emotion Regulation Score")
-
-# =============================================================================
-# DIAGNOSTICS PLOTS (run per model)
-# =============================================================================
-plot_diagnostics <- function(model, label) {
-  par(mfrow = c(2, 2))
-  plot(model, main = label)
-  par(mfrow = c(1, 1))
-}
-
-plot_diagnostics(model_stroop,  "Stroop")
-plot_diagnostics(model_nback,   "N-Back")
-plot_diagnostics(model_pvt,     "PVT")
-plot_diagnostics(model_stress,  "Stress")
-plot_diagnostics(model_emotion, "Emotion Regulation")
-
-# =============================================================================
-# MODEL COMPARISON TABLE (R², Adj R², F-stat, p-value)
-# =============================================================================
-model_list <- list(
-  "Stroop RT"          = model_stroop,
-  "N-Back Accuracy"    = model_nback,
-  "PVT RT"             = model_pvt,
-  "Stress Level"       = model_stress,
-  "Emotion Regulation" = model_emotion
-)
-
-comparison_table <- map_dfr(model_list, function(m) {
-  s <- summary(m)
-  f <- s$fstatistic
-  p_val <- pf(f[1], f[2], f[3], lower.tail = FALSE)
-  tibble(
-    R2        = round(s$r.squared, 3),
-    Adj_R2    = round(s$adj.r.squared, 3),
-    F_stat    = round(f[1], 3),
-    df1       = f[2],
-    df2       = f[3],
-    p_value   = round(p_val, 4)
-  )
-}, .id = "Outcome")
-
-cat("\n", strrep("=", 60), "\n")
-cat("MODEL COMPARISON TABLE\n")
-cat(strrep("=", 60), "\n")
-print(comparison_table)
-
-```
-
-```{r}
-# =============================================================================
-# LASSO Regularization Models: Cognitive & Stress/Emotion Outcomes
-# Uses cross-validated LASSO (glmnet) for automatic variable selection
-# =============================================================================
-
 library(tidyverse)
 library(glmnet)
+library(broom)
+library(patchwork)
 
-# --- Load Data ---------------------------------------------------------------
-df <- df %>%
-  mutate(Gender = as.numeric(factor(Gender)) - 1) %>%  # Binary encode: 0/1 for glmnet
-  select(-Participant_ID)                               # Drop ID column — not a predictor
+# ── Data prep ─────────────────────────────────
+df_model <- df %>%
+  select(
+    Stroop_Task_Reaction_Time,
+    Sleep_Hours, Sleep_Quality_Score, Daytime_Sleepiness,
+    BMI, Caffeine_Intake, Physical_Activity_Level,
+    Stress_Level, Age, Gender
+  ) %>%
+  drop_na() %>%
+  mutate(Gender = factor(Gender))
 
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
+# ── Model 1: Unadjusted OLS (sleep only) ─────
+m1 <- lm(Stroop_Task_Reaction_Time ~
+           Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness,
+         data = df_model)
 
-# Fit LASSO with cross-validation and return results
-fit_lasso <- function(outcome_var, predictor_vars, data, label) {
-  
-  # Drop rows with NA in outcome or predictors
-  model_data <- data %>%
-    select(all_of(c(outcome_var, predictor_vars))) %>%
-    drop_na()
-  
-  X <- model_data %>% select(all_of(predictor_vars)) %>% as.matrix()
-  
-  # Abort early with informative message if NAs remain
-  if (any(is.na(X))) {
-    na_cols <- colnames(X)[colSums(is.na(X)) > 0]
-    stop("NAs found in predictor columns: ", paste(na_cols, collapse = ", "),
-         "\nCheck your data for missing values or non-numeric columns.")
-  }
-  y <- model_data[[outcome_var]]
-  
-  # Scale predictors for fair penalization
-  X_scaled <- scale(X)
-  
-  # 10-fold cross-validated LASSO (alpha = 1)
-  set.seed(42)
-  cv_fit <- cv.glmnet(X_scaled, y, alpha = 1, nfolds = 10)
-  
-  # Extract coefficients at lambda.min and lambda.1se
-  coef_min  <- coef(cv_fit, s = "lambda.min")
-  coef_1se  <- coef(cv_fit, s = "lambda.1se")
-  
-  # Selected variables (non-zero coefficients at lambda.1se — more parsimonious)
-  selected_vars <- rownames(coef_1se)[which(coef_1se != 0)]
-  selected_vars <- selected_vars[selected_vars != "(Intercept)"]
-  
-  # R² at lambda.min
-  y_hat  <- predict(cv_fit, newx = X_scaled, s = "lambda.min")
-  ss_res <- sum((y - y_hat)^2)
-  ss_tot <- sum((y - mean(y))^2)
-  r2     <- 1 - ss_res / ss_tot
-  
-  # Print results
-  cat("\n", strrep("=", 60), "\n")
-  cat("LASSO MODEL:", label, "\n")
-  cat(strrep("=", 60), "\n")
-  cat("Optimal lambda (min CV error):  ", round(cv_fit$lambda.min, 4), "\n")
-  cat("Optimal lambda (1-SE rule):     ", round(cv_fit$lambda.1se, 4), "\n")
-  cat("Cross-validated R² (lambda.min):", round(r2, 3), "\n\n")
-  
-  cat("--- Coefficients at lambda.1se (parsimonious model) ---\n")
-  print(coef_1se[coef_1se[,1] != 0, , drop = FALSE])
-  
-  cat("\nSelected predictors:", 
-      ifelse(length(selected_vars) > 0, 
-             paste(selected_vars, collapse = ", "), 
-             "None — all shrunk to zero"), "\n")
-  
-  # Return for further use
-  list(
-    cv_fit        = cv_fit,
-    label         = label,
-    outcome       = outcome_var,
-    selected_vars = selected_vars,
-    r2            = r2,
-    lambda_min    = cv_fit$lambda.min,
-    lambda_1se    = cv_fit$lambda.1se
+cat("\n========== Model 1: Unadjusted (Sleep Only) ==========\n")
+summary(m1)
+
+# ── Model 2: Adjusted OLS (sleep + covariates) 
+m2 <- lm(Stroop_Task_Reaction_Time ~
+           Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
+           BMI + Caffeine_Intake + Physical_Activity_Level +
+           Stress_Level + Age + Gender,
+         data = df_model)
+
+cat("\n========== Model 2: Adjusted (Sleep + Covariates) ==========\n")
+summary(m2)
+
+# ── Model 3: LASSO ────────────────────────────
+X <- model.matrix(Stroop_Task_Reaction_Time ~
+                    Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
+                    BMI + Caffeine_Intake + Physical_Activity_Level +
+                    Stress_Level + Age + Gender,
+                  data = df_model)[, -1]  # drop intercept
+
+y <- df_model$Stroop_Task_Reaction_Time
+
+set.seed(42)
+lasso_cv <- cv.glmnet(X, y, alpha = 1, nfolds = 10)
+
+cat("\n========== Model 3: LASSO ==========\n")
+cat("Optimal lambda (lambda.min):", lasso_cv$lambda.min, "\n")
+cat("Lambda 1SE:", lasso_cv$lambda.1se, "\n\n")
+
+lasso_coefs <- coef(lasso_cv, s = "lambda.1se")
+print(lasso_coefs)
+
+# ── Residual diagnostics for OLS models ──────
+par(mfrow = c(2, 2))
+plot(m1, main = "Model 1 Diagnostics")
+
+par(mfrow = c(2, 2))
+plot(m2, main = "Model 2 Diagnostics")
+
+# ── Coefficient plot: Model 1 vs Model 2 ─────
+tidy_m1 <- tidy(m1, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(model = "Unadjusted")
+
+tidy_m2 <- tidy(m2, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(model = "Adjusted")
+
+coef_df <- bind_rows(tidy_m1, tidy_m2) %>%
+  mutate(term = recode(term,
+    "Sleep_Hours"              = "Sleep Hours",
+    "Sleep_Quality_Score"      = "Sleep Quality Score",
+    "Daytime_Sleepiness"       = "Daytime Sleepiness",
+    "BMI"                      = "BMI",
+    "Caffeine_Intake"          = "Caffeine Intake",
+    "Physical_Activity_Level"  = "Physical Activity Level",
+    "Stress_Level"             = "Stress Level",
+    "Age"                      = "Age",
+    "GenderMale"               = "Gender (Male)"
+  ))
+
+ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate), color = model)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                 height = 0.25, position = position_dodge(0.5)) +
+  geom_point(size = 3, position = position_dodge(0.5)) +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title    = "OLS Coefficients: Stroop Task Reaction Time",
+    subtitle = "Unadjusted vs. adjusted model with 95% confidence intervals",
+    x        = "Coefficient Estimate (seconds)",
+    y        = NULL,
+    color    = "Model"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title    = element_text(face = "bold"),
+    plot.subtitle = element_text(color = "grey50"),
+    legend.position = "bottom"
   )
-}
 
-# Plot CV error curve
-plot_lasso <- function(lasso_result) {
-  plot(lasso_result$cv_fit,
-       main = paste("CV Error —", lasso_result$label))
-}
+# ── LASSO path plot ───────────────────────────
+plot(lasso_cv,
+     main = "LASSO Cross-Validation: Stroop Task Reaction Time")
+```
 
-# =============================================================================
-# PREDICTOR SETS (same logic as MLR script — avoid circularity)
-# =============================================================================
-cognitive_predictors <- c(
-  "Sleep_Hours", "Sleep_Quality_Score", "Daytime_Sleepiness",
-  "Age", "Gender", "BMI",
-  "Caffeine_Intake", "Physical_Activity_Level", "Stress_Level"
-)
+### PVT Reaction Time
 
-stress_predictors <- c(
-  "Sleep_Hours", "Sleep_Quality_Score", "Daytime_Sleepiness",
-  "Age", "Gender", "BMI",
-  "Caffeine_Intake", "Physical_Activity_Level"
-)
+```{r}
+# ══════════════════════════════════════════════
+# PVT Reaction Time
+# ══════════════════════════════════════════════
 
-# =============================================================================
-# FIT ALL MODELS
-# =============================================================================
-lasso_stroop  <- fit_lasso("Stroop_Task_Reaction_Time", cognitive_predictors, df, "Stroop RT")
-lasso_nback   <- fit_lasso("N_Back_Accuracy",           cognitive_predictors, df, "N-Back Accuracy")
-lasso_pvt     <- fit_lasso("PVT_Reaction_Time",         cognitive_predictors, df, "PVT RT")
-lasso_stress  <- fit_lasso("Stress_Level",              stress_predictors,    df, "Stress Level")
-lasso_emotion <- fit_lasso("Emotion_Regulation_Score",  stress_predictors,    df, "Emotion Regulation")
+df_model_pvt <- df %>%
+  select(
+    PVT_Reaction_Time,
+    Sleep_Hours, Sleep_Quality_Score, Daytime_Sleepiness,
+    BMI, Caffeine_Intake, Physical_Activity_Level,
+    Stress_Level, Age, Gender
+  ) %>%
+  drop_na() %>%
+  mutate(Gender = factor(Gender))
 
-# =============================================================================
-# CV ERROR PLOTS (one per model)
-# =============================================================================
-par(mfrow = c(2, 3))
-plot_lasso(lasso_stroop)
-plot_lasso(lasso_nback)
-plot_lasso(lasso_pvt)
-plot_lasso(lasso_stress)
-plot_lasso(lasso_emotion)
-par(mfrow = c(1, 1))
+# ── Model 1: Unadjusted OLS (sleep only) ─────
+m1_pvt <- lm(PVT_Reaction_Time ~
+               Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness,
+             data = df_model_pvt)
 
-# =============================================================================
-# SUMMARY COMPARISON TABLE
-# =============================================================================
-all_models <- list(lasso_stroop, lasso_nback, lasso_pvt, lasso_stress, lasso_emotion)
+cat("\n========== PVT RT | Model 1: Unadjusted (Sleep Only) ==========\n")
+summary(m1_pvt)
 
-summary_table <- map_dfr(all_models, function(m) {
-  tibble(
-    Outcome        = m$label,
-    R2_lambda_min  = round(m$r2, 3),
-    Lambda_min     = round(m$lambda_min, 4),
-    Lambda_1se     = round(m$lambda_1se, 4),
-    N_Selected     = length(m$selected_vars),
-    Selected_Vars  = ifelse(length(m$selected_vars) > 0,
-                            paste(m$selected_vars, collapse = ", "),
-                            "None")
+# ── Model 2: Adjusted OLS ─────────────────────
+m2_pvt <- lm(PVT_Reaction_Time ~
+               Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
+               BMI + Caffeine_Intake + Physical_Activity_Level +
+               Stress_Level + Age + Gender,
+             data = df_model_pvt)
+
+cat("\n========== PVT RT | Model 2: Adjusted (Sleep + Covariates) ==========\n")
+summary(m2_pvt)
+
+# ── Model 3: LASSO ────────────────────────────
+X_pvt <- model.matrix(PVT_Reaction_Time ~
+                        Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
+                        BMI + Caffeine_Intake + Physical_Activity_Level +
+                        Stress_Level + Age + Gender,
+                      data = df_model_pvt)[, -1]
+
+y_pvt <- df_model_pvt$PVT_Reaction_Time
+
+set.seed(42)
+lasso_cv_pvt <- cv.glmnet(X_pvt, y_pvt, alpha = 1, nfolds = 10)
+
+cat("\n========== PVT RT | Model 3: LASSO ==========\n")
+cat("Optimal lambda (lambda.min):", lasso_cv_pvt$lambda.min, "\n")
+cat("Lambda 1SE:", lasso_cv_pvt$lambda.1se, "\n\n")
+print(coef(lasso_cv_pvt, s = "lambda.1se"))
+
+# ── Residual diagnostics ──────────────────────
+par(mfrow = c(2, 2))
+plot(m1_pvt, main = "PVT RT | Model 1 Diagnostics")
+
+par(mfrow = c(2, 2))
+plot(m2_pvt, main = "PVT RT | Model 2 Diagnostics")
+
+# ── Coefficient plot ──────────────────────────
+tidy_m1_pvt <- tidy(m1_pvt, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(model = "Unadjusted")
+
+tidy_m2_pvt <- tidy(m2_pvt, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(model = "Adjusted")
+
+coef_df_pvt <- bind_rows(tidy_m1_pvt, tidy_m2_pvt) %>%
+  mutate(term = recode(term,
+    "Sleep_Hours"             = "Sleep Hours",
+    "Sleep_Quality_Score"     = "Sleep Quality Score",
+    "Daytime_Sleepiness"      = "Daytime Sleepiness",
+    "BMI"                     = "BMI",
+    "Caffeine_Intake"         = "Caffeine Intake",
+    "Physical_Activity_Level" = "Physical Activity Level",
+    "Stress_Level"            = "Stress Level",
+    "Age"                     = "Age",
+    "GenderMale"              = "Gender (Male)"
+  ))
+
+ggplot(coef_df_pvt, aes(x = estimate, y = reorder(term, estimate), color = model)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                 height = 0.25, position = position_dodge(0.5)) +
+  geom_point(size = 3, position = position_dodge(0.5)) +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title    = "OLS Coefficients: PVT Reaction Time",
+    subtitle = "Unadjusted vs. adjusted model with 95% confidence intervals",
+    x        = "Coefficient Estimate (milliseconds)",
+    y        = NULL,
+    color    = "Model"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title      = element_text(face = "bold"),
+    plot.subtitle   = element_text(color = "grey50"),
+    legend.position = "bottom"
   )
-})
 
-cat("\n", strrep("=", 60), "\n")
-cat("LASSO MODEL COMPARISON SUMMARY\n")
-cat(strrep("=", 60), "\n")
-print(summary_table, width = Inf)
+# ── LASSO CV plot ─────────────────────────────
+plot(lasso_cv_pvt,
+     main = "LASSO Cross-Validation: PVT Reaction Time")
+```
 
-# =============================================================================
-# OPTIONAL: Refit OLS on LASSO-selected variables (for interpretable coefs)
-# =============================================================================
-refit_ols <- function(lasso_result, data) {
-  vars <- lasso_result$selected_vars
-  if (length(vars) == 0) {
-    cat("\nNo variables selected for", lasso_result$label, "— skipping OLS refit.\n")
-    return(NULL)
-  }
-  formula <- as.formula(paste(lasso_result$outcome, "~", paste(vars, collapse = " + ")))
-  model   <- lm(formula, data = data)
-  cat("\n--- OLS Refit on LASSO-selected vars:", lasso_result$label, "---\n")
-  print(summary(model))
-  model
-}
+### N-Back Accuracy
 
-ols_stroop  <- refit_ols(lasso_stroop,  df)
-ols_nback   <- refit_ols(lasso_nback,   df)
-ols_pvt     <- refit_ols(lasso_pvt,     df)
-ols_stress  <- refit_ols(lasso_stress,  df)
-ols_emotion <- refit_ols(lasso_emotion, df)
+```{r}
+# ══════════════════════════════════════════════
+# N-Back Accuracy
+# ══════════════════════════════════════════════
+
+df_model_nback <- df %>%
+  select(
+    N_Back_Accuracy,
+    Sleep_Hours, Sleep_Quality_Score, Daytime_Sleepiness,
+    BMI, Caffeine_Intake, Physical_Activity_Level,
+    Stress_Level, Age, Gender
+  ) %>%
+  drop_na() %>%
+  mutate(Gender = factor(Gender))
+
+# ── Model 1: Unadjusted OLS (sleep only) ─────
+m1_nback <- lm(N_Back_Accuracy ~
+                 Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness,
+               data = df_model_nback)
+
+cat("\n========== N-Back Accuracy | Model 1: Unadjusted (Sleep Only) ==========\n")
+summary(m1_nback)
+
+# ── Model 2: Adjusted OLS ─────────────────────
+m2_nback <- lm(N_Back_Accuracy ~
+                 Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
+                 BMI + Caffeine_Intake + Physical_Activity_Level +
+                 Stress_Level + Age + Gender,
+               data = df_model_nback)
+
+cat("\n========== N-Back Accuracy | Model 2: Adjusted (Sleep + Covariates) ==========\n")
+summary(m2_nback)
+
+# ── Model 3: LASSO ────────────────────────────
+X_nback <- model.matrix(N_Back_Accuracy ~
+                          Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
+                          BMI + Caffeine_Intake + Physical_Activity_Level +
+                          Stress_Level + Age + Gender,
+                        data = df_model_nback)[, -1]
+
+y_nback <- df_model_nback$N_Back_Accuracy
+
+set.seed(42)
+lasso_cv_nback <- cv.glmnet(X_nback, y_nback, alpha = 1, nfolds = 10)
+
+cat("\n========== N-Back Accuracy | Model 3: LASSO ==========\n")
+cat("Optimal lambda (lambda.min):", lasso_cv_nback$lambda.min, "\n")
+cat("Lambda 1SE:", lasso_cv_nback$lambda.1se, "\n\n")
+print(coef(lasso_cv_nback, s = "lambda.1se"))
+
+# ── Residual diagnostics ──────────────────────
+par(mfrow = c(2, 2))
+plot(m1_nback, main = "N-Back Accuracy | Model 1 Diagnostics")
+
+par(mfrow = c(2, 2))
+plot(m2_nback, main = "N-Back Accuracy | Model 2 Diagnostics")
+
+# ── Coefficient plot ──────────────────────────
+tidy_m1_nback <- tidy(m1_nback, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(model = "Unadjusted")
+
+tidy_m2_nback <- tidy(m2_nback, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(model = "Adjusted")
+
+coef_df_nback <- bind_rows(tidy_m1_nback, tidy_m2_nback) %>%
+  mutate(term = recode(term,
+    "Sleep_Hours"             = "Sleep Hours",
+    "Sleep_Quality_Score"     = "Sleep Quality Score",
+    "Daytime_Sleepiness"      = "Daytime Sleepiness",
+    "BMI"                     = "BMI",
+    "Caffeine_Intake"         = "Caffeine Intake",
+    "Physical_Activity_Level" = "Physical Activity Level",
+    "Stress_Level"            = "Stress Level",
+    "Age"                     = "Age",
+    "GenderMale"              = "Gender (Male)"
+  ))
+
+ggplot(coef_df_nback, aes(x = estimate, y = reorder(term, estimate), color = model)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                 height = 0.25, position = position_dodge(0.5)) +
+  geom_point(size = 3, position = position_dodge(0.5)) +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title    = "OLS Coefficients: N-Back Accuracy",
+    subtitle = "Unadjusted vs. adjusted model with 95% confidence intervals",
+    x        = "Coefficient Estimate (% correct)",
+    y        = NULL,
+    color    = "Model"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title      = element_text(face = "bold"),
+    plot.subtitle   = element_text(color = "grey50"),
+    legend.position = "bottom"
+  )
+
+# ── LASSO CV plot ─────────────────────────────
+plot(lasso_cv_nback,
+     main = "LASSO Cross-Validation: N-Back Accuracy")
+```
+
+### Emotion Regulation Score
+
+```{r}
+# ══════════════════════════════════════════════
+# Emotion Regulation Score
+# ══════════════════════════════════════════════
+
+df_model_emo <- df %>%
+  select(
+    Emotion_Regulation_Score,
+    Sleep_Hours, Sleep_Quality_Score, Daytime_Sleepiness,
+    BMI, Caffeine_Intake, Physical_Activity_Level,
+    Stress_Level, Age, Gender
+  ) %>%
+  drop_na() %>%
+  mutate(Gender = factor(Gender))
+
+# ── Model 1: Unadjusted OLS (sleep only) ─────
+m1_emo <- lm(Emotion_Regulation_Score ~
+               Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness,
+             data = df_model_emo)
+
+cat("\n========== Emotion Regulation | Model 1: Unadjusted (Sleep Only) ==========\n")
+summary(m1_emo)
+
+# ── Model 2: Adjusted OLS ─────────────────────
+m2_emo <- lm(Emotion_Regulation_Score ~
+               Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
+               BMI + Caffeine_Intake + Physical_Activity_Level +
+               Stress_Level + Age + Gender,
+             data = df_model_emo)
+
+cat("\n========== Emotion Regulation | Model 2: Adjusted (Sleep + Covariates) ==========\n")
+summary(m2_emo)
+
+# ── Model 3: LASSO ────────────────────────────
+X_emo <- model.matrix(Emotion_Regulation_Score ~
+                        Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
+                        BMI + Caffeine_Intake + Physical_Activity_Level +
+                        Stress_Level + Age + Gender,
+                      data = df_model_emo)[, -1]
+
+y_emo <- df_model_emo$Emotion_Regulation_Score
+
+set.seed(42)
+lasso_cv_emo <- cv.glmnet(X_emo, y_emo, alpha = 1, nfolds = 10)
+
+cat("\n========== Emotion Regulation | Model 3: LASSO ==========\n")
+cat("Optimal lambda (lambda.min):", lasso_cv_emo$lambda.min, "\n")
+cat("Lambda 1SE:", lasso_cv_emo$lambda.1se, "\n\n")
+print(coef(lasso_cv_emo, s = "lambda.1se"))
+
+# ── Residual diagnostics ──────────────────────
+par(mfrow = c(2, 2))
+plot(m1_emo, main = "Emotion Regulation | Model 1 Diagnostics")
+
+par(mfrow = c(2, 2))
+plot(m2_emo, main = "Emotion Regulation | Model 2 Diagnostics")
+
+# ── Coefficient plot ──────────────────────────
+tidy_m1_emo <- tidy(m1_emo, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(model = "Unadjusted")
+
+tidy_m2_emo <- tidy(m2_emo, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(model = "Adjusted")
+
+coef_df_emo <- bind_rows(tidy_m1_emo, tidy_m2_emo) %>%
+  mutate(term = recode(term,
+    "Sleep_Hours"             = "Sleep Hours",
+    "Sleep_Quality_Score"     = "Sleep Quality Score",
+    "Daytime_Sleepiness"      = "Daytime Sleepiness",
+    "BMI"                     = "BMI",
+    "Caffeine_Intake"         = "Caffeine Intake",
+    "Physical_Activity_Level" = "Physical Activity Level",
+    "Stress_Level"            = "Stress Level",
+    "Age"                     = "Age",
+    "GenderMale"              = "Gender (Male)"
+  ))
+
+ggplot(coef_df_emo, aes(x = estimate, y = reorder(term, estimate), color = model)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                 height = 0.25, position = position_dodge(0.5)) +
+  geom_point(size = 3, position = position_dodge(0.5)) +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title    = "OLS Coefficients: Emotion Regulation Score",
+    subtitle = "Unadjusted vs. adjusted model with 95% confidence intervals",
+    x        = "Coefficient Estimate (score units, 0–70)",
+    y        = NULL,
+    color    = "Model"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title      = element_text(face = "bold"),
+    plot.subtitle   = element_text(color = "grey50"),
+    legend.position = "bottom"
+  )
+
+# ── LASSO CV plot ─────────────────────────────
+plot(lasso_cv_emo,
+     main = "LASSO Cross-Validation: Emotion Regulation Score")
 ```
