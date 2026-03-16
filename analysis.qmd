@@ -1037,3 +1037,62 @@ ggplot(coef_df_emo, aes(x = estimate, y = reorder(term, estimate), color = model
 plot(lasso_cv_emo,
      main = "LASSO Cross-Validation: Emotion Regulation Score")
 ```
+
+## Top 5 Important Visualizations
+
+```{r top5_viz, message=FALSE, warning=FALSE, fig.width=10, fig.height=7}
+# ── 1. Cognitive Performance Distributions ────────────────────────────────────
+p_cognitive
+
+# ── 2. Correlation Matrix ─────────────────────────────────────────────────────
+p_corr
+
+# ── 3. Sleep Hours vs. Cognitive Outcomes ────────────────────────────────────
+p_hours
+
+# ── 4. K-Means: Sleep & Cognitive Profiles ───────────────────────────────────
+(p_pca | p_box) +
+  plot_annotation(
+    title    = "K-Means Clustering: Sleep & Cognitive Profiles",
+    subtitle = paste0("k = ", k_final,
+                      " | Features: Sleep Hours, Sleep Quality, Daytime Sleepiness,",
+                      " Stroop RT, N-Back Accuracy, PVT RT, Emotion Regulation"),
+    theme    = theme(
+      plot.title    = element_text(face = "bold", size = 15),
+      plot.subtitle = element_text(size = 10, color = "grey40")
+    )
+  )
+
+# ── 5. OLS Coefficients: All 4 Outcomes ──────────────────────────────────────
+make_coef_plot <- function(coef_df, title, x_label) {
+  ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate), color = model)) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                   height = 0.25, position = position_dodge(0.5)) +
+    geom_point(size = 2.5, position = position_dodge(0.5)) +
+    scale_color_brewer(palette = "Set1") +
+    labs(title = title, x = x_label, y = NULL, color = "Model") +
+    theme_minimal(base_size = 11) +
+    theme(
+      plot.title      = element_text(face = "bold", size = 11),
+      legend.position = "bottom"
+    )
+}
+
+p_coef_stroop <- make_coef_plot(coef_df,       "Stroop RT (seconds)",       "Estimate (seconds)")
+p_coef_pvt    <- make_coef_plot(coef_df_pvt,   "PVT RT (milliseconds)",     "Estimate (ms)")
+p_coef_nback  <- make_coef_plot(coef_df_nback, "N-Back Accuracy (% correct)", "Estimate (%)")
+p_coef_emo    <- make_coef_plot(coef_df_emo,   "Emotion Regulation (0–70)", "Estimate (score units)")
+
+(p_coef_stroop | p_coef_pvt) / (p_coef_nback | p_coef_emo) +
+  plot_annotation(
+    title    = "OLS Coefficients Across All Cognitive Outcomes",
+    subtitle = "Unadjusted (sleep only) vs. adjusted (sleep + covariates) models | 95% confidence intervals",
+    theme    = theme(
+      plot.title    = element_text(face = "bold", size = 15),
+      plot.subtitle = element_text(color = "grey50", size = 11)
+    )
+  ) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
