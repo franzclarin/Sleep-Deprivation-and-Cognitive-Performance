@@ -13,7 +13,7 @@ editor: visual
 
 ## Read Data
 
-```{r read_data}
+```{r read_data, message=FALSE, warning=FALSE}
 library(readr)
 
 df <- read_csv("sleep_deprivation_dataset_detailed.csv")
@@ -45,9 +45,9 @@ Note:
 
 -   `Gender` is a binary variable.
 
-### Univariate Distrubutions
+### Univariate Distributions
 
-```{r}
+```{r univariate_distributions, message=FALSE, warning=FALSE}
 library(ggplot2)
 library(tidyverse)
 library(dplyr)
@@ -229,7 +229,7 @@ p_lifestyle_disc_notitle <- p_lifestyle_disc +
 
 ### Correlation Matrix
 
-```{r corrplot}
+```{r corrplot, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(ggcorrplot)
 
@@ -279,7 +279,7 @@ p_corr
 
 ### Scatterplots
 
-```{r scatter_sleep_vs_cognition}
+```{r scatter_sleep_vs_cognition, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(ggplot2)
 library(dplyr)
@@ -345,7 +345,7 @@ print(p_quality)
 
 ### K-Means
 
-```{r K-Means: behavioral}
+```{r kmeans_behavioral, message=FALSE, warning=FALSE}
 # ─────────────────────────────────────────────
 # K-Means Clustering: Behavioral Features
 # ─────────────────────────────────────────────
@@ -470,7 +470,7 @@ df_clustered %>%
   print()
 ```
 
-```{r}
+```{r kmeans_sleep_cognitive, message=FALSE, warning=FALSE}
 # ─────────────────────────────────────────────
 # K-Means Clustering: Sleep + Cognitive Features
 # ─────────────────────────────────────────────
@@ -621,7 +621,7 @@ df_clustered_sc %>%
 
 ### Stroop Reaction Time
 
-```{r}
+```{r model_stroop, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(glmnet)
 library(broom)
@@ -646,7 +646,7 @@ m1 <- lm(Stroop_Task_Reaction_Time ~
 cat("\n========== Model 1: Unadjusted (Sleep Only) ==========\n")
 summary(m1)
 
-# ── Model 2: Adjusted OLS (sleep + covariates) 
+# ── Model 2: Adjusted OLS (sleep + covariates) ────────────────────────────────
 m2 <- lm(Stroop_Task_Reaction_Time ~
            Sleep_Hours + Sleep_Quality_Score + Daytime_Sleepiness +
            BMI + Caffeine_Intake + Physical_Activity_Level +
@@ -731,11 +731,8 @@ plot(lasso_cv,
 
 ### PVT Reaction Time
 
-```{r}
-# ══════════════════════════════════════════════
-# PVT Reaction Time
-# ══════════════════════════════════════════════
-
+```{r model_pvt}
+# ── Data prep ─────────────────────────────────
 df_model_pvt <- df %>%
   select(
     PVT_Reaction_Time,
@@ -837,11 +834,8 @@ plot(lasso_cv_pvt,
 
 ### N-Back Accuracy
 
-```{r}
-# ══════════════════════════════════════════════
-# N-Back Accuracy
-# ══════════════════════════════════════════════
-
+```{r model_nback}
+# ── Data prep ─────────────────────────────────
 df_model_nback <- df %>%
   select(
     N_Back_Accuracy,
@@ -943,11 +937,8 @@ plot(lasso_cv_nback,
 
 ### Emotion Regulation Score
 
-```{r}
-# ══════════════════════════════════════════════
-# Emotion Regulation Score
-# ══════════════════════════════════════════════
-
+```{r model_emotion}
+# ── Data prep ─────────────────────────────────
 df_model_emo <- df %>%
   select(
     Emotion_Regulation_Score,
